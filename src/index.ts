@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import {
   BETA_FLAGS,
   CLI_VERSION,
@@ -62,6 +62,7 @@ const OpenCodeFingerprintFix = () => {
       if (input.model?.providerID !== "anthropic") return;
 
       output.headers["user-agent"] = USER_AGENT;
+      output.headers["accept"] = "application/json";
       output.headers["x-app"] = "cli";
       output.headers["anthropic-version"] = ANTHROPIC_VERSION;
       output.headers["anthropic-dangerous-direct-browser-access"] = "true";
@@ -73,6 +74,12 @@ const OpenCodeFingerprintFix = () => {
       }
       if (!output.headers["x-stainless-timeout"]) {
         output.headers["x-stainless-timeout"] = "600";
+      }
+      if (!output.headers["x-stainless-helper-method"]) {
+        output.headers["x-stainless-helper-method"] = "stream";
+      }
+      if (!output.headers["x-client-request-id"]) {
+        output.headers["x-client-request-id"] = randomUUID();
       }
       output.headers["anthropic-beta"] = buildBetaFlags(
         output.headers["anthropic-beta"] || "",

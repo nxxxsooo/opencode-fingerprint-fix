@@ -30,7 +30,15 @@ export const USER_AGENT =
 
 export const BETA_FLAGS =
   process.env.ANTHROPIC_BETA_FLAGS ||
-  "interleaved-thinking-2025-05-14,context-management-2025-06-27,prompt-caching-scope-2026-01-05,claude-code-20250219,effort-2025-11-24";
+  [
+    "claude-code-20250219",
+    "oauth-2025-04-20",
+    "interleaved-thinking-2025-05-14",
+    "prompt-caching-scope-2026-01-05",
+    "effort-2025-11-24",
+    "context-management-2025-06-27",
+    "extended-cache-ttl-2025-04-11",
+  ].join(",");
 
 export const ANTHROPIC_VERSION = "2023-06-01";
 
