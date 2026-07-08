@@ -1,11 +1,13 @@
 {
   "name": "opencode-fingerprint-fix",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "OpenCode plugin — Claude Code fingerprint rewriting only. No auth. For use with Sub2API or other Anthropic-compatible proxies.",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/nxxxsooo/opencode-fingerprint-fix.git"
@@ -19,7 +21,13 @@
     "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit"
   },
-  "keywords": ["opencode", "anthropic", "fingerprint", "claude-code", "sub2api"],
+  "keywords": [
+    "opencode",
+    "anthropic",
+    "fingerprint",
+    "claude-code",
+    "sub2api"
+  ],
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^25.5.0",

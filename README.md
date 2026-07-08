@@ -7,13 +7,13 @@ It does not implement auth, OAuth, token refresh, keychain access, account switc
 ## What It Changes
 
 - Prepends a Claude Code identity line to the system prompt.
-- Rewrites Anthropic request headers such as user agent, app marker, SDK/runtime headers, version, and beta flags.
-- Adds the Claude Code billing-header style system block.
+- Adds the Claude Code billing-header style system line.
 - Replaces OpenCode references in system text with Claude Code references.
-- Prefixes tool names and `tool_use` block names with `mcp_`.
-- Adds `?beta=true` to `/v1/messages` URLs.
-- Adds adaptive thinking only for supported Opus/Sonnet 4.x model IDs.
-- Removes `thinking` from Haiku requests if an upstream layer already inserted it.
+- Rewrites Anthropic request headers such as user agent, app marker, SDK/runtime headers, version, and beta flags.
+- Adds the full Claude Code mimic beta set through Anthropic provider options.
+- Adds adaptive thinking only for Opus/Sonnet models that support adaptive thinking.
+- Omits `temperature` when thinking is enabled.
+- Preserves Haiku 4.5 `thinking: { "type": "enabled" }`; Haiku supports manual extended thinking, not adaptive thinking.
 
 ## Install From Source
 
@@ -40,7 +40,7 @@ Restart OpenCode after changing the plugin list.
 
 This plugin is meant for local compatibility testing with provider routes you control or are allowed to use. It does not provide credentials and does not bypass authentication.
 
-Haiku can fail while Opus/Sonnet work because some Sub2API Claude OAuth mimic paths historically treated Haiku differently from Sonnet/Opus. The relevant upstream fix is to apply the full Claude Code mimicry beta/header behavior to Haiku too.
+Haiku can fail while Opus/Sonnet work because some Sub2API Claude OAuth mimic paths historically treated Haiku differently from Sonnet/Opus. The relevant upstream fix is to apply the full Claude Code mimicry beta/header behavior to Haiku too. Haiku 4.5 supports manual extended thinking (`type: "enabled"` with a token budget), but not adaptive thinking.
 
 ## Credits
 

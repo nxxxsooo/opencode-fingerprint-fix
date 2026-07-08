@@ -3,7 +3,6 @@ import {
   BETA_FLAGS,
   CLI_VERSION,
   STAINLESS_HEADERS,
-  TOOL_PREFIX,
   USER_AGENT,
   ANTHROPIC_VERSION,
 } from "./constants.js";
@@ -20,6 +19,16 @@ function buildBetaFlags(existing: string): string {
   return [...new Set([...required, ...incoming])].join(",");
 }
 
+function buildBetaList(existing: unknown): string[] {
+  const current = Array.isArray(existing)
+    ? existing.filter((item): item is string => typeof item === "string")
+    : typeof existing === "string"
+      ? existing.split(",").map((item) => item.trim()).filter(Boolean)
+      : [];
+  const required = BETA_FLAGS.split(",").map((item) => item.trim()).filter(Boolean);
+  return [...new Set([...required, ...current])];
+}
+
 /** Deduplicate repeated Claude Code prefix in a text block. */
 function deduplicatePrefix(text: string): string {
   const doubled = `${CLAUDE_PREFIX}\n\n${CLAUDE_PREFIX}`;
@@ -27,6 +36,40 @@ function deduplicatePrefix(text: string): string {
     text = text.replace(doubled, CLAUDE_PREFIX);
   }
   return text;
+}
+
+function sanitizeSystemText(text: string): string {
+  return deduplicatePrefix(
+    text
+      .replace(/OpenCode/g, "Claude Code")
+      .replace(/opencode/gi, "Claude"),
+  );
+}
+
+function billingHeader(system: string[]): string {
+  const sysContent = system.join("");
+  const hash = createHash("sha256").update(sysContent).digest("hex");
+  return `x-anthropic-billing-header: cc_version=${CLI_VERSION}.${hash.slice(0, 3)}; cc_entrypoint=cli; cch=${hash.slice(0, 5)};`;
+}
+
+function modelID(model?: {
+  modelID?: string;
+  id?: string;
+  api?: { id?: string };
+}): string {
+  return model?.modelID || model?.id || model?.api?.id || "";
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function mergeAnthropicBetas(options: Record<string, unknown>): void {
+  options.anthropicBeta = buildBetaList(options.anthropicBeta);
+
+  const nested = isPlainRecord(options.anthropic) ? options.anthropic : {};
+  nested.anthropicBeta = buildBetaList(nested.anthropicBeta);
+  options.anthropic = nested;
 }
 
 // ── Plugin ─────────────────────────────────────────────────────────
@@ -42,16 +85,26 @@ const OpenCodeFingerprintFix = () => {
       output: { system: string[] },
     ) => {
       if (input.model?.providerID !== "anthropic") return;
-      if (output.system.some((s) => s.includes(CLAUDE_PREFIX))) return;
+
+      output.system = output.system.map(sanitizeSystemText);
+      const hasClaudePrefix = output.system.some((s) => s.includes(CLAUDE_PREFIX));
+      const hasBilling = output.system.some((s) =>
+        s.includes("x-anthropic-billing-header:"),
+      );
+      const prefix = hasClaudePrefix ? [] : [CLAUDE_PREFIX];
+      const billing = hasBilling ? [] : [billingHeader(output.system)];
+      const injected = [...prefix, ...billing].join("\n\n");
+
+      if (!injected) return;
       if (output.system.length > 0) {
-        output.system[0] = `${CLAUDE_PREFIX}\n\n${output.system[0]}`;
+        output.system[0] = `${injected}\n\n${output.system[0]}`;
       } else {
-        output.system.push(CLAUDE_PREFIX);
+        output.system.push(injected);
       }
     },
 
     /**
-     * Intercept fetch to rewrite headers, body, and URL for Claude Code
+     * Rewrite request headers for Claude Code
      * fingerprint compatibility. Works with any auth method (API key,
      * proxy, Sub2API) — does NOT manage credentials.
      */
@@ -61,8 +114,13 @@ const OpenCodeFingerprintFix = () => {
     ) => {
       if (input.model?.providerID !== "anthropic") return;
 
-      output.headers["user-agent"] = USER_AGENT;
-      output.headers["accept"] = "application/json";
+      delete output.headers["user-agent"];
+      delete output.headers["User-Agent"];
+      delete output.headers["accept"];
+      delete output.headers["Accept"];
+
+      output.headers["User-Agent"] = USER_AGENT;
+      output.headers["Accept"] = "application/json";
       output.headers["x-app"] = "cli";
       output.headers["anthropic-version"] = ANTHROPIC_VERSION;
       output.headers["anthropic-dangerous-direct-browser-access"] = "true";
@@ -87,119 +145,46 @@ const OpenCodeFingerprintFix = () => {
     },
 
     /**
-     * Rewrite the request body: inject billing header, sanitize system
-     * prompt, prefix tool names, add thinking for supported models,
-     * append ?beta=true to URL.
+     * Rewrite provider options through OpenCode's supported hook surface.
+     * OpenCode has no chat.body.transform hook, so provider-option mutations
+     * need to happen here before the AI SDK serializes the Anthropic request.
      */
-    "chat.body.transform": (
-      input: { model?: { providerID: string; modelID?: string } },
+    "chat.params": (
+      input: {
+        model?: {
+          providerID: string;
+          modelID?: string;
+          id?: string;
+          api?: { id?: string };
+        };
+      },
       output: {
-        body: Record<string, unknown>;
-        url?: string;
+        temperature?: number;
+        options: Record<string, unknown>;
       },
     ) => {
       if (input.model?.providerID !== "anthropic") return;
 
-      const body = output.body;
-      const modelID = input.model?.modelID || "";
-
-      // Inject billing header as first system block
-      if (!body.system) body.system = [];
-      const sysArray = body.system as Array<{ text?: string; type?: string }>;
-      const hasBilling = sysArray.some(
-        (s) => s.text?.startsWith("x-anthropic-billing-header:"),
-      );
-      if (!hasBilling) {
-        const sysContent = sysArray
-          .map((s) => s.text || "")
-          .join("");
-        const hash = createHash("sha256").update(sysContent).digest("hex");
-        sysArray.unshift({
-          type: "text",
-          text: `x-anthropic-billing-header: cc_version=${CLI_VERSION}.${hash.slice(0, 3)}; cc_entrypoint=cli; cch=${hash.slice(0, 5)};`,
-        });
-      }
-
-      // Sanitize system prompt — replace OpenCode references with Claude Code
-      if (Array.isArray(body.system)) {
-        body.system = (body.system as Array<{ type?: string; text?: string }>).map(
-          (item) => {
-            if (item.type === "text" && item.text) {
-              return {
-                ...item,
-                text: deduplicatePrefix(
-                  item.text
-                    .replace(/OpenCode/g, "Claude Code")
-                    .replace(/opencode/gi, "Claude"),
-                ),
-              };
-            }
-            return item;
-          },
-        );
-      }
-
-      // Prefix tool names with mcp_
-      if (body.tools && Array.isArray(body.tools)) {
-        body.tools = (body.tools as Array<{ name?: string }>).map(
-          (tool) => ({
-            ...tool,
-            name:
-              tool.name && !tool.name.startsWith(TOOL_PREFIX)
-                ? `${TOOL_PREFIX}${tool.name}`
-                : tool.name,
-          }),
-        );
-      }
-
-      // Prefix tool_use blocks in messages
-      if (body.messages && Array.isArray(body.messages)) {
-        for (const msg of body.messages as Array<{ content?: Array<{ type?: string; name?: string }> }>) {
-          if (!Array.isArray(msg.content)) continue;
-          for (const block of msg.content) {
-            if (
-              block.type === "tool_use" &&
-              block.name &&
-              !block.name.startsWith(TOOL_PREFIX)
-            ) {
-              block.name = `${TOOL_PREFIX}${block.name}`;
-            }
-          }
-        }
-      }
-
-      // Haiku does NOT support thinking — strip it if present
-      const isHaiku = modelID.toLowerCase().includes("haiku");
-      if (isHaiku && body.thinking) {
-        delete body.thinking;
-      }
+      const id = modelID(input.model);
+      mergeAnthropicBetas(output.options);
 
       // Inject adaptive thinking for models that support it
-      const THINKING_MODELS = ["claude-opus-4", "claude-sonnet-4-6"];
-      const supportsThinking = THINKING_MODELS.some((m) => modelID.includes(m));
-      if (!body.thinking && supportsThinking) {
-        body.thinking = { type: "adaptive" };
+      const ADAPTIVE_THINKING_MODELS = [
+        "claude-opus-4-6",
+        "claude-opus-4-7",
+        "claude-opus-4-8",
+        "claude-sonnet-4-6",
+      ];
+      const supportsAdaptiveThinking = ADAPTIVE_THINKING_MODELS.some((m) =>
+        id.includes(m),
+      );
+      if (!output.options.thinking && supportsAdaptiveThinking) {
+        output.options.thinking = { type: "adaptive" };
       }
 
-      // Force temperature=1 when thinking is enabled
-      const thinkingType = (body.thinking as { type?: string })?.type;
-      if (
-        (thinkingType === "enabled" || thinkingType === "adaptive") &&
-        body.temperature !== undefined &&
-        body.temperature !== 1
-      ) {
-        body.temperature = 1;
-      }
-
-      // Append ?beta=true to URL
-      if (output.url) {
-        try {
-          const url = new URL(output.url);
-          if (url.pathname === "/v1/messages" && !url.searchParams.has("beta")) {
-            url.searchParams.set("beta", "true");
-            output.url = url.toString();
-          }
-        } catch {}
+      const thinkingType = (output.options.thinking as { type?: string })?.type;
+      if (thinkingType === "enabled" || thinkingType === "adaptive") {
+        delete output.temperature;
       }
     },
   };
