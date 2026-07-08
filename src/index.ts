@@ -8,38 +8,10 @@ import {
   ANTHROPIC_VERSION,
 } from "./constants.js";
 
-// ── Types ─────────────────────────────────────────────────────────
-
-type ProviderModel = {
-  cost?: unknown;
-  name?: string;
-  attachment?: boolean;
-  reasoning?: boolean;
-  tool_call?: boolean;
-  temperature?: boolean;
-  limit?: { context: number; output: number };
-  modalities?: { input: string[]; output: string[] };
-};
-
 // ── Helpers ────────────────────────────────────────────────────────
 
 const CLAUDE_PREFIX =
   "You are Claude Code, Anthropic's official CLI for Claude.";
-
-/** Merge HeadersInit onto a Headers object. */
-function mergeHeaders(target: Headers, source: HeadersInit) {
-  if (source instanceof Headers) {
-    source.forEach((v, k) => target.set(k, v));
-  } else if (Array.isArray(source)) {
-    for (const [k, v] of source) {
-      if (v !== undefined) target.set(k, String(v));
-    }
-  } else {
-    for (const [k, v] of Object.entries(source)) {
-      if (v !== undefined) target.set(k, String(v));
-    }
-  }
-}
 
 /** Build deduplicated beta flags string. */
 function buildBetaFlags(existing: string): string {
