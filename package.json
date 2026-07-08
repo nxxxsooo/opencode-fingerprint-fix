@@ -1,6 +1,6 @@
 {
   "name": "opencode-fingerprint-fix",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "OpenCode plugin — Claude Code fingerprint rewriting only. No auth. For use with Sub2API or other Anthropic-compatible proxies.",
   "type": "module",
   "main": "dist/index.js",
