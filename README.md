@@ -1,5 +1,8 @@
 # opencode-fingerprint-fix
 
+> [!IMPORTANT]
+> **Archived in July 2026.** This repository is preserved as a historical request-shape experiment and is no longer maintained. For Mingjian's active OpenCode → Sub2API → Haiku path, use [`opencode-sub2api-haiku-fix`](https://github.com/nxxxsooo/opencode-sub2api-haiku-fix). The published `opencode-fingerprint-fix` versions are deprecated and should not be installed for new setups.
+
 Small OpenCode plugin that rewrites Anthropic request metadata to match the Claude Code CLI request shape.
 
 It does not implement auth, OAuth, token refresh, keychain access, account switching, or a proxy. It only transforms the request that OpenCode is already sending through your configured Anthropic-compatible provider, for example Sub2API.
@@ -19,7 +22,9 @@ It does not implement auth, OAuth, token refresh, keychain access, account switc
 - Strips Haiku `thinking`, `context_management`, and `output_config.effort` in the OpenCode/Sub2API path.
 - Compacts Haiku requests by removing OpenCode tool schemas/tool choice, trimming system text to Claude Code identity + billing, and capping `max_tokens` to 2048.
 
-## Install From Source
+## Historical Source
+
+The final source remains available for inspection:
 
 ```sh
 git clone https://github.com/nxxxsooo/opencode-fingerprint-fix.git
@@ -28,17 +33,7 @@ npm install
 npm run build
 ```
 
-Then add the built plugin path to `~/.config/opencode/opencode.jsonc`:
-
-```jsonc
-{
-  "plugin": [
-    "/absolute/path/to/opencode-fingerprint-fix/dist/index.js"
-  ]
-}
-```
-
-Restart OpenCode after changing the plugin list.
+Do not add the built plugin to a current OpenCode configuration. The successor is intentionally Haiku-specific and is not a line-by-line replacement for this repository's older Sonnet, Opus, and generic Anthropic rewrites; those experimental paths are no longer part of the supported local setup.
 
 ## Notes
 
